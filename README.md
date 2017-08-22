@@ -8,3 +8,6 @@ But the input interface is different:
     sql2rst.pl reads schema information from a properly annotated SQL script.
     This project reads schema information from an existing SQL database.
 
+An example with clusters:
+![Example schema diagram](example_schema.png "Example schema diagram")
+
