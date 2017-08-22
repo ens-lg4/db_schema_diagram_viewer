@@ -75,6 +75,7 @@ def draw_schema_diagram( url, meta_data ):
 url         = sys.argv[1] if sys.argv[1:] else os.environ['EHIVE_TEST_PIPELINE_URLS']
 json_fname  = sys.argv[2] if sys.argv[2:] else 'ehive_clusters.json'
 
-meta_data   = json.load( open(json_fname, 'r') )
+with open(json_fname, 'r') as json_file :
+    meta_data   = json.load( json_file )
 
 draw_schema_diagram( url, meta_data )
