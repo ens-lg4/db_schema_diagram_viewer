@@ -29,7 +29,7 @@ def fetch_mysql_schema( mysql_engine, database_name ):
     return mysql_schema
 
 
-def draw_table_node( graph, table_name, column_names, fillcolor='black' ):
+def draw_table_node( graph, table_name, column_names, fillcolor='grey' ):
     """Create a graphviz node for a table
     """
 
@@ -47,35 +47,17 @@ def draw_fkey( graph, from_table, from_column, to_table, to_column ):
     """Create a graphviz edge for a foreign key
     """
 
-    graph.edge( from_table + ':port_' + from_column + ':w', to_table + ':port_' + to_column + ':e' )
+    graph.edge( from_table + ':port_' + from_column + ':e', to_table + ':port_' + to_column + ':w' )
 
 
-def draw_schema_diagram( url ):
+def draw_schema_diagram( url, meta_data ):
     """Draw a schema diagram given the database url
     """
 
-    meta        = {
-        'hive_meta'                 :   'purple',
-        'analysis_base'             :   '#C70C09',
-        'dataflow_rule'             :   '#C70C09',
-        'dataflow_target'           :   '#C70C09',
-        'analysis_stats'            :   '#C70C09',
-        'pipeline_wide_parameters'  :   '#C70C09',
-        'analysis_ctrl_rule'        :   'pink',
-        'resource_class'            :   '#FF7504',
-        'resource_description'      :   '#FF7504',
-        'job'                       :   '#1D73DA',
-        'semaphore'                 :   '#1D73DA',
-        'job_file'                  :   '#1D73DA',
-        'accu'                      :   '#1D73DA',
-        'analysis_data'             :   '#1D73DA',
-        'worker'                    :   '#24DA06',
-        'role'                      :   '#24DA06',
-        'beekeeper'                 :   '#24DA06',
-        'worker_resource_usage'     :   '#F4D20C',
-        'log_message'               :   '#F4D20C',
-        'analysis_stats_monitor'    :   '#F4D20C',
-    }
+    cluster_of  = {}
+    for cluster_name,cluster_attribs in meta_data.items() :
+        for table_name in cluster_attribs['tables'] :
+            cluster_of[table_name] = cluster_name,cluster_attribs
 
     alch_url    = re.sub('^mysql://', 'mysql+pymysql://', url)
     dbname      = re.search('/(\w+)$', url).group(1)
@@ -84,19 +66,88 @@ def draw_schema_diagram( url ):
     schema      = fetch_mysql_schema( engine, dbname )
 
     main_graph  = graphviz.Digraph( format='png' )
-    main_graph.graph_attr['rankdir'] = 'RL'
+    main_graph.graph_attr['rankdir'] = 'LR'
     main_graph.graph_attr['concentrate'] = 'true'
+
     for table_name,attrib in schema.items() :
-        draw_table_node( main_graph, table_name, attrib['columns'], fillcolor = meta.get(table_name) )
+        cluster_pair    = cluster_of.get(table_name)
+        if cluster_pair :
+            cluster_name,cluster_attribs    = cluster_pair
+            if not cluster_attribs.get('cluster_object') :
+                special_graph   = graphviz.Digraph(name='cluster_'+cluster_name)
+                special_graph.attr(style='filled', color=cluster_attribs['tone_colour'], fillcolor=cluster_attribs['tone_colour'])
+                cluster_attribs['cluster_object'] = special_graph
+            else :
+                special_graph   = cluster_attribs['cluster_object']
+            container_graph = special_graph
+            table_colour    = cluster_attribs['table_colour']
+        else :
+            container_graph = main_graph
+            table_colour    = 'grey'
+        draw_table_node( container_graph, table_name, attrib['columns'], fillcolor = table_colour )
 
         for fkey in attrib['fkeys'] :
             table_column, fk_table_name, fk_table_column = fkey
             draw_fkey( main_graph, table_name, table_column, fk_table_name, fk_table_column )
 
-    # print(main_graph.source)
+    for cluster_attribs in meta_data.values() :
+        special_graph   = cluster_attribs.get('cluster_object')
+        if special_graph :
+            main_graph.subgraph(special_graph)
     main_graph.render('table_diagram', view=True);
 
 
+meta_data   = {
+    'red' : {
+        'tables'        : {
+                            'analysis_base',
+                            'dataflow_rule',
+                            'dataflow_target',
+                            'analysis_stats',
+                            'pipeline_wide_parameters',
+                          },
+        'table_colour'  : '#C70C09',
+        'tone_colour'   : '#FFDDDD',
+    },
+    'orange' : {
+        'tables'        : {
+                            'resource_class',
+                            'resource_description',
+                          },
+        'table_colour'  : '#FF7504',
+        'tone_colour'   : '#FFEEDD',
+    },
+    'blue' : {
+        'tables'        : {
+                            'job',
+                            'semaphore',
+                            'job_file',
+                            'accu',
+                            'analysis_data',
+                          },
+        'table_colour'  : '#1D73DA',
+        'tone_colour'   : '#DDEEFF',
+    },
+    'green' : {
+        'tables'        : {
+                            'worker',
+                            'role',
+                            'beekeeper',
+                          },
+        'table_colour'  : '#24DA06',
+        'tone_colour'   : '#DDFFDD',
+    },
+    'yellow' : {
+        'tables'        : {
+                            'worker_resource_usage',
+                            'log_message',
+                            'analysis_stats_monitor',
+                          },
+        'table_colour'  : '#F4D20C',
+        'tone_colour'   : '#FFFFDD',
+    },
+}
+
 url = sys.argv[1] if sys.argv[1:] else os.environ['EHIVE_TEST_PIPELINE_URLS']
 
-draw_schema_diagram( url )
+draw_schema_diagram( url, meta_data )
