@@ -4,6 +4,7 @@ import db_helper
 import graphviz
 import sys
 import os
+import json
 
 
 def draw_table_node( graph, table_name, column_names, fillcolor='grey' ):
@@ -33,6 +34,7 @@ def draw_schema_diagram( url, meta_data ):
 
     cluster_of  = {}
     for cluster_name,cluster_attribs in meta_data.items() :
+        cluster_attribs['tables'] = set( cluster_attribs['tables'] )
         for table_name in cluster_attribs['tables'] :
             cluster_of[table_name] = cluster_name,cluster_attribs
 
@@ -70,57 +72,9 @@ def draw_schema_diagram( url, meta_data ):
     main_graph.render('table_diagram', view=True);
 
 
-meta_data   = {
-    'red' : {
-        'tables'        : {
-                            'analysis_base',
-                            'dataflow_rule',
-                            'dataflow_target',
-                            'analysis_stats',
-                            'pipeline_wide_parameters',
-                          },
-        'table_colour'  : '#C70C09',
-        'tone_colour'   : '#FFDDDD',
-    },
-    'orange' : {
-        'tables'        : {
-                            'resource_class',
-                            'resource_description',
-                          },
-        'table_colour'  : '#FF7504',
-        'tone_colour'   : '#FFEEDD',
-    },
-    'blue' : {
-        'tables'        : {
-                            'job',
-                            'semaphore',
-                            'job_file',
-                            'accu',
-                            'analysis_data',
-                          },
-        'table_colour'  : '#1D73DA',
-        'tone_colour'   : '#DDEEFF',
-    },
-    'green' : {
-        'tables'        : {
-                            'worker',
-                            'role',
-                            'beekeeper',
-                          },
-        'table_colour'  : '#24DA06',
-        'tone_colour'   : '#DDFFDD',
-    },
-    'yellow' : {
-        'tables'        : {
-                            'worker_resource_usage',
-                            'log_message',
-                            'analysis_stats_monitor',
-                          },
-        'table_colour'  : '#F4D20C',
-        'tone_colour'   : '#FFFFDD',
-    },
-}
+url         = sys.argv[1] if sys.argv[1:] else os.environ['EHIVE_TEST_PIPELINE_URLS']
+json_fname  = sys.argv[2] if sys.argv[2:] else 'ehive_clusters.json'
 
-url = sys.argv[1] if sys.argv[1:] else os.environ['EHIVE_TEST_PIPELINE_URLS']
+meta_data   = json.load( open(json_fname, 'r') )
 
 draw_schema_diagram( url, meta_data )
