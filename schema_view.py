@@ -12,8 +12,8 @@ def fetch_mysql_schema( mysql_engine, database_name ):
 
     mysql_schema = {}
 
-    table_res   = mysql_engine.execute('SELECT table_name FROM INFORMATION_SCHEMA.TABLES'
-                                   +' WHERE TABLE_TYPE="BASE TABLE" AND table_schema="' + database_name + '"')
+    table_res   = mysql_engine.execute('SELECT table_name FROM information_schema.tables'
+                                   +' WHERE table_type="BASE TABLE" AND table_schema="' + database_name + '"')
     for table_row in table_res :
         table_name  = table_row[0]
 
@@ -27,6 +27,47 @@ def fetch_mysql_schema( mysql_engine, database_name ):
         mysql_schema[table_name] = { 'columns' : columns, 'fkeys' : fkeys }
 
     return mysql_schema
+
+def fetch_pgsql_schema( pgsql_engine, database_name ):
+    """Fetch table/column and foreign key definition from a PostgreSQL database
+    """
+
+    pgsql_schema = {}
+
+    table_res   = pgsql_engine.execute("""  SELECT table_name
+                                            FROM information_schema.tables
+                                            WHERE table_type='BASE TABLE'
+                                            AND table_schema='public'
+                                            AND table_catalog='""" + database_name + "'")
+
+    for table_row in table_res :
+        table_name  = table_row[0]
+
+        column_res   = pgsql_engine.execute(""" SELECT column_name
+                                                FROM information_schema.columns
+                                                WHERE table_schema='public'
+                                                AND table_catalog='""" + database_name + "' AND table_name='" + table_name + "'")
+
+        columns     = [column_row[0] for column_row in column_res]
+
+        fkeys       = {}
+
+        fk_res      = pgsql_engine.execute("""  SELECT kcu.column_name,
+                                                ccu.table_name AS foreign_table_name,
+                                                ccu.column_name AS foreign_column_name
+                                                FROM
+                                                information_schema.table_constraints AS tc
+                                                JOIN information_schema.key_column_usage AS kcu
+                                                ON tc.constraint_name = kcu.constraint_name
+                                                JOIN information_schema.constraint_column_usage AS ccu
+                                                ON ccu.constraint_name = tc.constraint_name
+                                                WHERE constraint_type = 'FOREIGN KEY' AND tc.table_name='""" + table_name + "'");
+
+        fkeys       = [ (fk_row['column_name'],fk_row['foreign_table_name'],fk_row['foreign_column_name'])
+                        for fk_row in fk_res ]
+        pgsql_schema[table_name] = { 'columns' : columns, 'fkeys' : fkeys }
+
+    return pgsql_schema
 
 
 def draw_table_node( graph, table_name, column_names, fillcolor='grey' ):
@@ -59,11 +100,18 @@ def draw_schema_diagram( url, meta_data ):
         for table_name in cluster_attribs['tables'] :
             cluster_of[table_name] = cluster_name,cluster_attribs
 
-    alch_url    = re.sub('^mysql://', 'mysql+pymysql://', url)
-    dbname      = re.search('/(\w+)$', url).group(1)
-
-    engine      = sqlalchemy.create_engine( alch_url )
-    schema      = fetch_mysql_schema( engine, dbname )
+    if re.match('^mysql://', url) :
+        alch_url    = re.sub('^mysql://', 'mysql+pymysql://', url)
+        dbname      = re.search('/(\w+)$', url).group(1)
+        engine      = sqlalchemy.create_engine( alch_url )
+        schema      = fetch_mysql_schema( engine, dbname )
+    elif re.match('^pgsql://', url) :
+        alch_url    = re.sub('^pgsql://', 'postgresql+pygresql://', url)
+        dbname      = re.search('/(\w+)$', url).group(1)
+        engine      = sqlalchemy.create_engine( alch_url )
+        schema      = fetch_pgsql_schema( engine, dbname )
+    else :
+        exit(0)
 
     main_graph  = graphviz.Digraph( format='png' )
     main_graph.graph_attr['rankdir'] = 'LR'
